@@ -3,6 +3,7 @@
  * using 1 parameter for 1 generator
  */
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
+#define CL_USE_DEPRECATED_OPENCL_2_0_APIS
 #define __CL_ENABLE_EXCEPTIONS
 
 #include "opencl_tools.hpp"
@@ -143,11 +144,7 @@ static int test(int argc, char * argv[])
     platforms = getPlatforms();
     devices = getDevices();
     context = getContext();
-#if defined(APPLE) || defined(__MACOSX) || defined(__APPLE__)
-    source = getSource("../kernels_src/clh/mtgp32.clh");
-#else
     source = getSource("mtgp32.cl");
-#endif
     program = getProgram();
     queue = getCommandQueue();
 #if defined(DEBUG)
@@ -194,21 +191,7 @@ static int test(int argc, char * argv[])
     mtgp32 = new mtgp32_fast_t[opt.group_num];
     init_check_data(mtgp32, opt.group_num, 1234);
     initialize_by_seed(mtgp_buffers, opt.group_num, 1234);
-    for (int i = 0; i < 2; i++) {
-	generate_uint32(mtgp_buffers, opt.group_num, opt.data_count);
-    }
-    free_check_data(mtgp32, opt.group_num);
-
-    // initialize by array
-    // generate single float
-    uint32_t seed_array[5] = {1, 2, 3, 4, 5};
-    init_check_data_array(mtgp32, opt.group_num, seed_array, 5);
-    initialize_by_array(mtgp_buffers, opt.group_num,
-			seed_array, 5);
-    for (int i = 0; i < 1; i++) {
-	generate_single12(mtgp_buffers, opt.group_num, opt.data_count);
 	generate_single01(mtgp_buffers, opt.group_num, opt.data_count);
-    }
     free_check_data(mtgp32, opt.group_num);
     delete[] mtgp32;
     return 0;
@@ -273,179 +256,6 @@ static void initialize_by_seed(buffers_t mtgp_buffers,
 #if defined(DEBUG)
     cout << "initialize_by_seed end" << endl;
 #endif
-}
-
-/**
- * initialize mtgp status in device global memory
- * using 1 parameter for 1 generator.
- *@param mtgp_buffers device global memories
- *@param group number of group
- *@param seed_array seeds for initialization
- *@param seed_size size of seed_array
- */
-static void initialize_by_array(buffers_t& mtgp_buffers,
-				int group,
-				uint32_t seed_array[],
-				int seed_size)
-{
-#if defined(DEBUG)
-    cout << "initialize_by_array start" << endl;
-#endif
-    Buffer seed_array_buffer(context,
-			     CL_MEM_READ_WRITE,
-			     seed_size * sizeof(uint32_t));
-    queue.enqueueWriteBuffer(seed_array_buffer,
-			     CL_TRUE,
-			     0,
-			     seed_size * sizeof(uint32_t),
-			     seed_array);
-    Kernel init_kernel(program, "mtgp32_init_array_kernel");
-    init_kernel.setArg(0, mtgp_buffers.rec);
-    init_kernel.setArg(1, mtgp_buffers.tmp);
-    init_kernel.setArg(2, mtgp_buffers.flt);
-    init_kernel.setArg(3, mtgp_buffers.pos);
-    init_kernel.setArg(4, mtgp_buffers.sh1);
-    init_kernel.setArg(5, mtgp_buffers.sh2);
-    init_kernel.setArg(6, mtgp_buffers.status);
-    init_kernel.setArg(7, seed_array_buffer);
-    init_kernel.setArg(8, seed_size);
-    int local_item = MTGP32_N;
-    if (thread_max) {
-	local_item = MTGP32_TN;
-    }
-    NDRange global(group * local_item);
-    NDRange local(local_item);
-    Event event;
-    queue.enqueueNDRangeKernel(init_kernel,
-			       NullRange,
-			       global,
-			       local,
-			       NULL,
-			       &event);
-    double time = get_time(event);
-    uint status[group * MTGP32_N];
-    queue.enqueueReadBuffer(mtgp_buffers.status,
-			    CL_TRUE,
-			    0,
-			    sizeof(uint32_t) * MTGP32_N * group,
-			    status);
-    cout << "initializing time = " << time * 1000 << "ms" << endl;
-    check_status(status, group);
-#if defined(DEBUG)
-    cout << "initialize_by_array end" << endl;
-#endif
-}
-
-/**
- * generate 32 bit unsigned random numbers in device global memory
- *@param mtgp_buffers device global memories
- *@param group_num number of groups for execution
- *@param data_size number of data to generate
- */
-static void generate_uint32(buffers_t& mtgp_buffers,
-			    int group_num,
-			    int data_size)
-{
-#if defined(DEBUG)
-    cout << "generate_uint32 start" << endl;
-#endif
-    int item_num = MTGP32_TN * group_num;
-    int min_size = MTGP32_LS * group_num;
-    if (data_size % min_size != 0) {
-	data_size = (data_size / min_size + 1) * min_size;
-    }
-    Kernel uint_kernel(program, "mtgp32_uint32_kernel");
-    Buffer output_buffer(context,
-			 CL_MEM_READ_WRITE,
-			 data_size * sizeof(uint32_t));
-    uint_kernel.setArg(0, mtgp_buffers.rec);
-    uint_kernel.setArg(1, mtgp_buffers.tmp);
-    uint_kernel.setArg(2, mtgp_buffers.flt);
-    uint_kernel.setArg(3, mtgp_buffers.pos);
-    uint_kernel.setArg(4, mtgp_buffers.sh1);
-    uint_kernel.setArg(5, mtgp_buffers.sh2);
-    uint_kernel.setArg(6, mtgp_buffers.status);
-    uint_kernel.setArg(7, output_buffer);
-    uint_kernel.setArg(8, data_size / group_num);
-    NDRange global(item_num);
-    NDRange local(MTGP32_TN);
-    Event generate_event;
-#if defined(DEBUG)
-    cout << "generate_uint32 enque kernel start" << endl;
-#endif
-    queue.enqueueNDRangeKernel(uint_kernel,
-			       NullRange,
-			       global,
-			       local,
-			       NULL,
-			       &generate_event);
-    uint32_t * output = new uint32_t[data_size];
-    generate_event.wait();
-    queue.enqueueReadBuffer(output_buffer,
-			    CL_TRUE,
-			    0,
-			    data_size * sizeof(uint32_t),
-			    output);
-    check_data(output, data_size, group_num);
-    print_uint32(output, data_size, item_num);
-    double time = get_time(generate_event);
-    cout << "generate time:" << time * 1000 << "ms" << endl;
-    delete[] output;
-#if defined(DEBUG)
-    cout << "generate_uint32 end" << endl;
-#endif
-}
-
-/**
- * generate single precision floating point numbers in the range [1, 2)
- * in device global memory
- *@param mtgp_buffers device global memories
- *@param group_num number of groups for execution
- *@param data_size number of data to generate
- */
-static void generate_single12(buffers_t& mtgp_buffers,
-			      int group_num,
-			      int data_size)
-{
-    int item_num = MTGP32_TN * group_num;
-    int min_size = MTGP32_LS * group_num;
-    if (data_size % min_size != 0) {
-	data_size = (data_size / min_size + 1) * min_size;
-    }
-    Kernel single_kernel(program, "mtgp32_single12_kernel");
-    Buffer output_buffer(context,
-			 CL_MEM_READ_WRITE,
-			 data_size * sizeof(float));
-    single_kernel.setArg(0, mtgp_buffers.rec);
-    single_kernel.setArg(1, mtgp_buffers.tmp);
-    single_kernel.setArg(2, mtgp_buffers.flt);
-    single_kernel.setArg(3, mtgp_buffers.pos);
-    single_kernel.setArg(4, mtgp_buffers.sh1);
-    single_kernel.setArg(5, mtgp_buffers.sh2);
-    single_kernel.setArg(6, mtgp_buffers.status);
-    single_kernel.setArg(7, output_buffer);
-    single_kernel.setArg(8, data_size / group_num);
-    NDRange global(item_num);
-    NDRange local(MTGP32_TN);
-    Event generate_event;
-    queue.enqueueNDRangeKernel(single_kernel,
-			       NullRange,
-			       global,
-			       local,
-			       NULL,
-			       &generate_event);
-    float * output = new float[data_size];
-    generate_event.wait();
-    queue.enqueueReadBuffer(output_buffer,
-			    CL_TRUE,
-			    0,
-			    data_size * sizeof(float),
-			    &output[0]);
-    check_data12(output, data_size, group_num);
-    print_float(&output[0], data_size, item_num);
-    double time = get_time(generate_event);
-    delete[] output;
-    cout << "generate time:" << time * 1000 << "ms" << endl;
 }
 
 /**
@@ -525,29 +335,6 @@ static int init_check_data(mtgp32_fast_t mtgp32[],
     return 0;
 }
 
-static int init_check_data_array(mtgp32_fast_t mtgp32[],
-				 int group_num,
-				 uint32_t seed_array[],
-				 int size)
-{
-#if defined(DEBUG)
-    cout << "init_check_data_array start" << endl;
-#endif
-    for (int i = 0; i < group_num; i++) {
-	int rc = mtgp32_init_by_array(&mtgp32[i],
-				      &mtgp32_params_fast_11213[i],
-				      seed_array,
-				      size);
-	if (rc) {
-	    return rc;
-	}
-    }
-#if defined(DEBUG)
-    cout << "init_check_data_array end" << endl;
-#endif
-    return 0;
-}
-
 static void free_check_data(mtgp32_fast_t mtgp32[], int group_num)
 {
 #if defined(DEBUG)
@@ -579,50 +366,6 @@ static void check_data(uint32_t * h_data,
 	for (int j = 0; j < size; j++) {
 	    uint32_t r = mtgp32_genrand_uint32(&mtgp32[i]);
 	    if ((h_data[i * size + j] != r) && disp_flg) {
-		cout << "mismatch i = " << dec << i
-		     << " j = " << dec << j
-		     << " data = " << hex << h_data[i * size + j]
-		     << " r = " << hex << r << endl;
-		cout << "check_data check N.G!" << endl;
-		count++;
-		error = true;
-	    }
-	    if (count > 10) {
-		disp_flg = false;
-	    }
-	}
-    }
-    if (!error) {
-	cout << "check_data check O.K!" << endl;
-    } else {
-	throw cl::Error(-1, "mtgp32 check_data error!");
-    }
-#if defined(DEBUG)
-    cout << "check_data end" << endl;
-#endif
-}
-
-static void check_data12(float * h_data,
-			 int num_data,
-			 int group_num)
-{
-#if defined(DEBUG)
-    cout << "check_data start" << endl;
-#endif
-    int size = num_data / group_num;
-#if defined(DEBUG)
-    cout << "size = " << dec << size << endl;
-#endif
-    bool error = false;
-    for (int i = 0; i < group_num; i++) {
-	bool disp_flg = true;
-	int count = 0;
-	for (int j = 0; j < size; j++) {
-	    float r = mtgp32_genrand_close1_open2(&mtgp32[i]);
-	    float d = h_data[i * size + j];
-	    bool ok = (-FLT_EPSILON <= (r - d))
-		&& ((r - d) <= FLT_EPSILON);
-	    if (!ok && disp_flg) {
 		cout << "mismatch i = " << dec << i
 		     << " j = " << dec << j
 		     << " data = " << hex << h_data[i * size + j]
