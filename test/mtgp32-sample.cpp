@@ -2,7 +2,7 @@
  * Sample host program for OpenCL
  * using 1 parameter for 1 generator
  */
-#define CL_USE_DEPRECATED_OPENCL_1_1_APIS
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #define __CL_ENABLE_EXCEPTIONS
 
 #include "opencl_tools.hpp"
@@ -144,7 +144,7 @@ static int test(int argc, char * argv[])
     devices = getDevices();
     context = getContext();
 #if defined(APPLE) || defined(__MACOSX) || defined(__APPLE__)
-    source = getSource("mtgp32.cli");
+    source = getSource("../kernels_src/clh/mtgp32.clh");
 #else
     source = getSource("mtgp32.cl");
 #endif

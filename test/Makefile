@@ -1,7 +1,7 @@
 #DEBUG = -DDEBUG -ggdb
 
 # Linux
-CC = g++ -O3 ${DEBUG} -lOpenCL
+CC = g++ -O3 ${DEBUG}
 # OSX 10.7.5
 #CC = g++ -O3 -framework opencl -I../ ${DEBUG}
 
@@ -14,7 +14,6 @@ CC = g++ -O3 ${DEBUG} -lOpenCL
 .SUFFIXES:      .cl .clh
 
 all:
-	${MAKE} -C all
 	${MAKE} mtgp32-sample
 
 mtgp32-sample: mtgp32-sample.cpp \
@@ -29,7 +28,8 @@ mtgp32-sample: mtgp32-sample.cpp \
 	${CC} -o $@ mtgp32-sample.cpp \
 		parse_opt.o \
 		mtgp32-fast.o \
-		mtgp32-param-fast.o
+		mtgp32-param-fast.o \
+		-lOpenCL
 
 .c.o:
 	gcc -O3 -std=c99 ${DEBUG} -c -o $@ $<
