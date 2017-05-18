@@ -21,13 +21,10 @@ mtgp32-sample: mtgp32-sample.cpp \
 		mtgp32-sample-common.h \
 		../kernels_src/cl/mtgp32.cl \
 		../kernels_src/clh/mtgp32.clh \
-		mtgp32-fast.h \
 		parse_opt.o \
-		mtgp32-fast.o \
 		mtgp32-param-fast.o
 	${CC} -o $@ mtgp32-sample.cpp \
 		parse_opt.o \
-		mtgp32-fast.o \
 		mtgp32-param-fast.o \
 		-lOpenCL
 
